@@ -17,10 +17,7 @@ const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; 
       <p className="text-sm font-medium text-slate-500">{title}</p>
       <h3 className="text-2xl font-bold text-slate-900 mt-1">{value}</h3>
     </div>
-    <div className={`p-3 rounded-xl ${color} bg-opacity-10 text-opacity-100 relative z-10`}>
-      {icon}
-    </div>
-    <div className={`absolute -right-4 -bottom-4 w-24 h-24 ${color} bg-opacity-5 rounded-full group-hover:scale-150 transition-transform duration-500`}></div>
+
   </div>
 );
 
@@ -97,11 +94,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, sales, stocks }) =>
   return (
     <div className="space-y-6 pb-20">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">仪表盘</h1>
-        <p className="text-slate-500">您的鞋店经营概况。</p>
+        <h1 className="text-2xl font-bold text-slate-900">鞋店管家</h1>
+        <p className="text-slate-500">鞋店管家 · 本机经营概况</p>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
           title="总利润" 
           value={`¥${stats.totalProfit.toLocaleString()}`} 
@@ -121,14 +118,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, sales, stocks }) =>
           color="bg-indigo-500"
         />
         <StatCard 
-          title="今日销量" 
+          title="今日销量（双）" 
           value={stats.salesToday.toString()} 
           icon={<TrendingUp className="w-6 h-6 text-orange-600" />} 
           color="bg-orange-500"
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Profit Trend Chart */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 lg:col-span-2">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">近7日利润趋势</h3>
@@ -151,7 +148,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, sales, stocks }) =>
                 />
                 <Tooltip 
                     cursor={{stroke: '#cbd5e1', strokeWidth: 1}}
-                    formatter={(value: number) => [`¥${value}`, '利润']}
+                    formatter={(value) => [`¥${value}`, '利润']}
                     labelStyle={{ color: '#64748b', marginBottom: '0.25rem' }}
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 />
@@ -195,7 +192,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ stats, sales, stocks }) =>
                 </div>
               ))
             ) : (
-              <div className="text-center text-slate-400 py-8 text-sm">暂无销量数据</div>
+              <div className="text-center text-slate-500 py-8 text-sm">暂无销量数据</div>
             )}
           </div>
         </div>

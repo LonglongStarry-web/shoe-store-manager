@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, Check, Plus, Trash2, ArrowLeft, ImageOff } from 'lucide-react';
 import { StockItem, StockVariant } from '../types';
-import { generateId } from '../App';
+import { generateId } from '../services/id';
 
 interface StockFormProps {
   initialData?: StockItem; // Optional prop for edit mode
@@ -143,21 +143,25 @@ export const StockForm: React.FC<StockFormProps> = ({ initialData, onAddStock, o
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (totalQuantity === 0) {
+    if (!name.trim() || !Number.isFinite(Number(unitCost)) || Number(unitCost) < 0 || variants.some(v => !v.size.trim() || !v.color.trim() || !Number.isSafeInteger(v.quantity) || v.quantity < 0)) {
+      alert('请检查商品名称、成本和规格数量。');
+      return;
+    }
+    if (totalQuantity === 0 && !initialData) {
       alert("请至少添加一件库存数量。");
       return;
     }
 
     const itemData: StockItem = {
       id: initialData ? initialData.id : generateId(), // Keep ID if editing
-      name,
+      name: name.trim(),
       category,
       description,
       imageUrl: imagePreview || undefined,
       initialQuantity: initialData ? initialData.initialQuantity : totalQuantity, // Keep initial if editing
       currentQuantity: totalQuantity, // Reset current based on variants
       unitCost: Number(unitCost),
-      totalCost: calculatedTotalCost,
+      totalCost: (initialData ? initialData.initialQuantity : totalQuantity) * Number(unitCost),
       purchaseDate: initialData ? initialData.purchaseDate : new Date().toISOString(),
       variants: variants.map(v => ({...v, quantity: Number(v.quantity)}))
     };

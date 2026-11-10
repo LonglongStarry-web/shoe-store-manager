@@ -5,11 +5,10 @@ import { InventoryList } from './components/InventoryList';
 import { StockForm } from './components/StockForm';
 import { SaleModal } from './components/SaleModal';
 import { StockItem, SaleRecord, AppView, DashboardStats } from './types';
+import { applySale, restoreSale, quantitySoldToday, validateBackup } from './services/inventory';
 
-// --- Safe ID Generator (Compatible with old Android) ---
-export const generateId = () => {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
-};
+import { generateId } from './services/id';
+export { generateId };
 
 // Initial data: Empty for production use
 const INITIAL_STOCKS: StockItem[] = [];
@@ -76,10 +75,14 @@ const App: React.FC = () => {
     saveToStorage(STORAGE_KEYS.SALES, sales);
   }, [sales]);
 
+  useEffect(() => {
+    window.history.replaceState({view: 'dashboard'}, '', '');
+  }, []);
+
   // --- Navigation & Hardware Back Button ---
   useEffect(() => {
     // Set initial history state to prevent null state on first back press
-    window.history.replaceState({ view: 'dashboard' }, '', '');
+
 
     const handlePopState = (event: PopStateEvent) => {
       // 1. Modal Priority: If modal is open, back button closes it first
@@ -160,31 +163,15 @@ const App: React.FC = () => {
 
   const handleConfirmSale = (newRecords: SaleRecord[]) => {
     if (newRecords.length === 0) return;
-    setSales(prev => [...newRecords, ...prev]);
-
-    const stockId = newRecords[0].stockId;
-    setStocks(prev => prev.map(item => {
-      if (item.id === stockId) {
-        const updatedVariants = item.variants?.map(variant => {
-          const saleForVariant = newRecords.find(r => r.variantId === variant.id);
-          if (saleForVariant) {
-            return {
-              ...variant,
-              quantity: Math.max(0, variant.quantity - saleForVariant.quantitySold)
-            };
-          }
-          return variant;
-        }) || [];
-
-        const newTotalQuantity = updatedVariants.reduce((sum, v) => sum + v.quantity, 0);
-        return {
-          ...item,
-          variants: updatedVariants,
-          currentQuantity: newTotalQuantity
-        };
-      }
-      return item;
-    }));
+    try {
+      const nextStocks = applySale(stocks, newRecords);
+      setStocks(nextStocks);
+      setSales(prev => [...newRecords, ...prev]);
+      return true;
+    } catch (error) {
+      alert((error as Error).message);
+      return false;
+    }
   };
   
   // NEW: Refund / Return Logic
@@ -198,32 +185,7 @@ const App: React.FC = () => {
 
       // 2. Restore stock quantity if the item still exists
       if (stock) {
-        setStocks(prev => prev.map(item => {
-          if (item.id === sale.stockId) {
-            // Find the specific variant to restore
-            const updatedVariants = item.variants?.map(variant => {
-               if (variant.id === sale.variantId) {
-                 return { ...variant, quantity: variant.quantity + sale.quantitySold };
-               }
-               return variant;
-            });
-            
-            // If variant logic failed (maybe legacy data), just update total? 
-            // Better to only update if variants found. If variant deleted, we can't easily restore.
-            // But we will try to update total anyway.
-            
-            const newTotalQuantity = updatedVariants 
-               ? updatedVariants.reduce((sum, v) => sum + v.quantity, 0)
-               : item.currentQuantity + sale.quantitySold;
-
-            return {
-              ...item,
-              variants: updatedVariants || item.variants,
-              currentQuantity: newTotalQuantity
-            };
-          }
-          return item;
-        }));
+        setStocks(prev => restoreSale(prev, sale));
         alert("退货成功：款项已扣除，库存已恢复。");
       } else {
         alert("退货成功：款项已扣除。\n⚠️ 注意：原商品已被删除，无法恢复库存数量。");
@@ -275,7 +237,8 @@ const App: React.FC = () => {
         return;
       }
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') console.log('Share failed, fallback to download');
+      if ((err as Error).name === 'AbortError') return;
+      console.log('Share failed, fallback to download');
     }
 
     const blob = new Blob([jsonString], { type: 'application/json' });
@@ -298,12 +261,7 @@ const App: React.FC = () => {
     reader.onload = (event) => {
       try {
         const json = event.target?.result as string;
-        const data = JSON.parse(json);
-
-        if (!data.stocks || !Array.isArray(data.stocks)) {
-          alert('文件格式错误');
-          return;
-        }
+        const data = validateBackup(JSON.parse(json));
 
         if (confirm(`⚠️ 警告：导入将覆盖当前所有数据！\n备份包含 ${data.stocks.length} 个商品。确定继续吗？`)) {
           setStocks(data.stocks);
@@ -312,7 +270,7 @@ const App: React.FC = () => {
           if (fileInputRef.current) fileInputRef.current.value = '';
         }
       } catch (err) {
-        alert('导入失败：文件损坏');
+        alert('导入失败：文件损坏或字段不符合备份格式。当前数据未更改。');
       }
     };
     reader.readAsText(file);
@@ -328,14 +286,7 @@ const App: React.FC = () => {
     const totalProfit = sales.reduce((sum, item) => sum + item.profit, 0);
     
     // Fix: Local Time Comparison for "Today"
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
-    
-    const salesToday = sales.filter(s => {
-      const sDate = new Date(s.saleDate);
-      const sDateStr = `${sDate.getFullYear()}-${sDate.getMonth()}-${sDate.getDate()}`;
-      return sDateStr === todayStr;
-    }).length;
+    const salesToday = quantitySoldToday(sales);
 
     return {
       totalInventoryCount,
@@ -460,7 +411,7 @@ const App: React.FC = () => {
                    </button>
                  </div>
                </div>
-               <div className="mt-8 text-center text-xs text-slate-400"><p>鞋店管家 v1.6.0 (兼容优化版)</p></div>
+               <div className="mt-8 text-center text-xs text-slate-400"><p>鞋店管家 v1.7.0</p></div>
              </div>
           )}
         </main>
@@ -475,7 +426,7 @@ const App: React.FC = () => {
               <Package className="w-6 h-6" /><span className="text-[10px] font-medium">库存</span>
             </button>
             <div className="relative -top-5">
-              <button onClick={() => { setStockToEdit(undefined); navigateTo('add-stock'); }} className="w-14 h-14 rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-200 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform">
+              <button onClick={() => { setStockToEdit(undefined); navigateTo('add-stock'); }} aria-label="新增库存" className="w-14 h-14 rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-200 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform">
                 <PlusCircle className="w-8 h-8" />
               </button>
             </div>

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, ShoppingBag, Plus, Trash2, AlertCircle, CheckCircle, Copy, Share } from 'lucide-react';
 import { StockItem, SaleRecord } from '../types';
-import { generateId } from '../App';
+import { generateId } from '../services/id';
+import { money } from '../services/inventory';
 
 interface SaleModalProps {
   stock: StockItem | null;
   isOpen: boolean;
   onClose: () => void;
-  onConfirmSale: (records: SaleRecord[]) => void;
+  onConfirmSale: (records: SaleRecord[]) => boolean | void;
 }
 
 interface PriceEntry {
@@ -99,6 +100,10 @@ export const SaleModal: React.FC<SaleModalProps> = ({ stock, isOpen, onClose, on
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (entries.some(e => !Number.isSafeInteger(Number(e.quantity)) || Number(e.quantity) <= 0 || e.price === '' || !Number.isFinite(Number(e.price)) || Number(e.price) < 0 || !e.variantId)) {
+      setError('数量须为正整数，售价须为非负数，且必须选择规格。');
+      return;
+    }
     if (!isStockSufficient) {
       setError("部分规格库存不足，请检查数量。");
       return;
@@ -124,12 +129,12 @@ export const SaleModal: React.FC<SaleModalProps> = ({ stock, isOpen, onClose, on
         quantitySold: qty,
         salePricePerUnit: price,
         saleDate: new Date().toISOString(),
-        totalRevenue: qty * price,
-        profit: (price - stock.unitCost) * qty
+        totalRevenue: money(qty * price),
+        profit: money((price - stock.unitCost) * qty)
       };
     });
 
-    onConfirmSale(newRecords);
+    if (onConfirmSale(newRecords) === false) return;
     setLastRecords(newRecords);
     setIsCompleted(true); // Switch to receipt view
   };

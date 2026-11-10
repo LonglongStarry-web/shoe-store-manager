@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.taste-skill/
+.env
+.env.*
+!.env.example
